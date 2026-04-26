@@ -67,7 +67,7 @@ Before hardening, Hestia allowed mail-related services such as IMAP, POP3, and S
 
 ### 1. Enabled UFW firewall
 
-UFW was enabled and configured with a default-deny inbound policy. Required services were allowed to avoid breaking access.
+UFW was enabled with a default-deny inbound policy, while Hestia firewall rules were also reviewed because the server stack uses Hestia to manage public service access. Required services were allowed to avoid breaking access.
 
 Allowed services:
 
@@ -119,3 +119,164 @@ MaxAuthTries 3
 PubkeyAuthentication yes
 PasswordAuthentication yes
 X11Forwarding no
+```
+
+Password authentication was kept enabled temporarily to avoid losing access while SSH key-based authentication is prepared.
+
+![SSH hardening](screenshots/08-ssh-hardening.png)
+
+## Validation
+
+### Required ports remained reachable
+
+External validation was performed from a separate Windows machine using PowerShell `Test-NetConnection`.
+
+The following required ports remained reachable after hardening:
+
+| Service | Port | Result |
+|---|---:|---|
+| SSH | 22 | Reachable |
+| HTTP | 80 | Reachable |
+| HTTPS | 443 | Reachable |
+| Hestia Panel | 8083 | Reachable |
+| FTP | 21 | Reachable |
+
+![Allowed ports validation](screenshots/06-allowed-ports-validation.png)
+
+### Unused mail ports were blocked
+
+After applying the firewall changes, unused mail-related ports were no longer reachable externally.
+
+| Service | Port | Result |
+|---|---:|---|
+| POP3 | 110 | Blocked |
+| IMAP | 143 | Blocked |
+| SMTPS | 465 | Blocked |
+| Mail Submission | 587 | Blocked |
+| IMAPS | 993 | Blocked |
+| POP3S | 995 | Blocked |
+
+![Blocked ports validation](screenshots/07-blocked-ports-validation.png)
+
+## Before and After Summary
+
+| Area | Before | After |
+|---|---|---|
+| UFW | Inactive | Active |
+| Public mail ports | Reachable | Blocked |
+| SSH root login | Enabled | Disabled |
+| X11 forwarding | Enabled | Disabled |
+| Max authentication attempts | Default | Limited to 3 |
+| Website availability | Working | Still working |
+| Hestia panel | Reachable | Still reachable |
+| FTP workflow | Reachable | Still reachable |
+
+## Security Improvements
+
+This project improved the server security posture by:
+
+- Reducing unnecessary public exposure
+- Enforcing firewall rules through UFW and Hestia
+- Blocking unused mail-related services
+- Preserving required services for website management
+- Disabling direct root SSH login
+- Disabling unnecessary X11 forwarding
+- Reducing SSH brute-force attack surface
+- Confirming that authentication attempts were visible in logs
+
+## Tools and Commands Used
+
+### System and service review
+
+```bash
+hostnamectl
+ss -tulpn
+sudo ufw status verbose
+sudo systemctl list-units --type=service --state=running
+df -h
+free -h
+```
+
+### Firewall configuration
+
+```bash
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 8083/tcp
+sudo ufw allow 51820/udp
+sudo ufw enable
+sudo ufw status verbose
+```
+
+### Hestia firewall changes
+
+The following service rules were changed from ACCEPT to DROP inside the Hestia firewall interface:
+
+```text
+IMAP: 143, 993
+POP3: 110, 995
+SMTP: 25, 465, 587
+```
+
+### SSH hardening
+
+```bash
+sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+sudo nano /etc/ssh/sshd_config
+sudo sshd -t
+sudo systemctl restart ssh
+sudo systemctl status ssh --no-pager -l
+```
+
+### External validation from Windows
+
+```powershell
+Test-NetConnection esherthings.work -Port 22
+Test-NetConnection esherthings.work -Port 80
+Test-NetConnection esherthings.work -Port 443
+Test-NetConnection panel.esherthings.work -Port 8083
+Test-NetConnection esherthings.work -Port 21
+Test-NetConnection esherthings.work -Port 110
+Test-NetConnection esherthings.work -Port 143
+Test-NetConnection esherthings.work -Port 465
+Test-NetConnection esherthings.work -Port 587
+Test-NetConnection esherthings.work -Port 993
+Test-NetConnection esherthings.work -Port 995
+```
+
+## Skills Demonstrated
+
+- Linux server administration
+- VPS security hardening
+- Firewall configuration
+- Hestia control panel firewall management
+- SSH security configuration
+- Service exposure review
+- External port validation
+- Defensive security documentation
+
+## Limitations
+
+This project focused on server hardening and exposure reduction. FTP was intentionally kept open because it was still required for website editing. Although UFW contained deny rules for FTP from earlier testing, Hestia firewall rules continued to allow FTP access for the current workflow. This is documented as a limitation, with a planned future migration from FTP to SFTP or Git-based deployment.
+
+Password authentication was also kept enabled temporarily to avoid access issues while SSH key-based login is prepared.
+
+DNS was kept open because the server is managed through Hestia and may be used for domain-related services.
+
+## Future Improvements
+
+- Replace FTP workflow with SFTP or Git-based deployment
+- Disable password-based SSH login after confirming SSH key access
+- Restrict SSH access by IP address or VPN
+- Add centralized logging with Wazuh
+- Add file integrity monitoring
+- Create alert rules for SSH brute-force attempts
+- Review DNS exposure if external DNS hosting is no longer required
+- Automate recurring security checks
+
+## Conclusion
+
+This project demonstrates a practical hardening process for a live Ubuntu VPS hosting a portfolio website. The server was moved from a broad-exposure baseline to a more controlled configuration while keeping required services operational.
+
+The final result reduced unnecessary public access, improved SSH security, and created a clear foundation for future monitoring with Wazuh or another SIEM platform.
